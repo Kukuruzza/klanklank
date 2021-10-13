@@ -1,3 +1,9 @@
+/Debug/
+/x64/
+*.user
+*.filters
+/.vs/
+
 # Prerequisites
 *.d
 
