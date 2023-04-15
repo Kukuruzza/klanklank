@@ -16,7 +16,7 @@ struct State
 {
     InterceptionContext intercepion_ctx;
     InterceptionDevice device;
-    GlobalModes global_mode = ModeKlank;
+    GlobalModes global_mode;
     bool is_esc_down;
     bool galt_down;
     bool caps_down;
@@ -25,6 +25,7 @@ struct State
     bool cursor_toggle_mode_on;
     bool cursor_toggle_on;
     bool cursor_mode;
+    bool alt_remap_enabled;
 };
 
 typedef uint16_t ushort;
@@ -50,11 +51,13 @@ void send_stroke(ushort code, bool is_down)
     interception_send(_state.intercepion_ctx, _state.device, (InterceptionStroke*)&ik, 1);
 }
 
-struct
+struct RemapElement
 {
     ushort in_code;
     ushort out_code;
-} _arrow_remap[] = 
+};
+
+RemapElement _arrow_remap[] = 
 {
     {SC_L, SC_LEFT},
     {SC_APOS, SC_RIGHT},
@@ -66,6 +69,20 @@ struct
     {SC_K, SC_END},
     {SC_NOP}
 };
+
+RemapElement _arrow_remap_alt[] =
+{
+    {SC_K, SC_LEFT},
+    {SC_SEMI, SC_RIGHT},
+    {SC_O, SC_UP},
+    {SC_L, SC_DOWN},
+    {SC_P, SC_PGUP},
+    {SC_LBRACK, SC_PGDOWN},
+    {SC_I, SC_HOME},
+    {SC_J, SC_END},
+    {SC_NOP}
+};
+
 
 bool update(InterceptionKeyStroke istroke)
 {
@@ -88,7 +105,7 @@ bool update(InterceptionKeyStroke istroke)
         {
             _state.cursor_mode = s.is_down;
         }
-        _state.galt_down = s.is_down;
+;        _state.galt_down = s.is_down;
 
         return false;
     }
@@ -134,6 +151,10 @@ bool update(InterceptionKeyStroke istroke)
             send_stroke(SC_NUMLOCK, true);
             send_stroke(SC_NUMLOCK, false);
         }
+        if(s.code == SC_A)
+        {
+            _state.alt_remap_enabled = !_state.alt_remap_enabled;
+        }
     }
 
     if(_state.global_mode == ModePass)
@@ -146,9 +167,16 @@ bool update(InterceptionKeyStroke istroke)
         return false;
     }
 
+    if(_state.alt_remap_enabled)
+    {
+        //block printscreen in alt mode
+        if(s.code == 0x37 && s.e0)
+            return false;
+    }
+
     if(_state.cursor_mode)
     {
-        auto r = _arrow_remap;
+        auto r = _state.alt_remap_enabled ? _arrow_remap_alt : _arrow_remap;
         for(; r->in_code != SC_NOP; ++r)
         {
             if(r->in_code == s.code)
@@ -172,6 +200,8 @@ int main()
 
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
+    memset(&_state, 0, sizeof(_state));
+    _state.global_mode = ModeKlank;
     _state.intercepion_ctx = interception_create_context();
 
     interception_set_filter(_state.intercepion_ctx, interception_is_keyboard, INTERCEPTION_FILTER_KEY_DOWN | INTERCEPTION_FILTER_KEY_UP | INTERCEPTION_FILTER_KEY_E0 | INTERCEPTION_FILTER_KEY_E1);
